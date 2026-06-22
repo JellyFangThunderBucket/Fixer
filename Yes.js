@@ -17,7 +17,7 @@
 // @run-at         document-start
 // @inject-into    content
 // @noframes
-// @version        31.1.0
+// @version        31.1.1
 // @downloadURL    https://socialfixer.com/socialfixer.user.js
 // @supportURL     https://socialfixer.com/support
 // @grant          GM_getValue
@@ -4346,18 +4346,66 @@ var FX = (function() {
         ignoreSfxIDsRegex.test(node.id) ||
         ignoreSfxClassNameRegex.test(node.className);
     const ignoreRemoval = ignoreMutation;
+    const runDomHandlers = (handlers, node) => {
+        if (!handlers.length) {
+            return false;
+        }
+        const $node = X(node);
+        for (let i = 0; i < handlers.length; i++) {
+            if (handlers[i]($node)) {
+                return true;
+            }
+        }
+        return false;
+    };
     const domNodeInserted = node =>
         ignoreInsertion(node) ||
-        fx.domNodeInsertedHandlers.some(handler => handler(X(node)));
+        runDomHandlers(fx.domNodeInsertedHandlers, node);
     const domNodeRemoved = node =>
         ignoreRemoval(node) ||
-        fx.domNodeRemovedHandlers.some(handler => handler(X(node)));
-    const _observer = mutations =>
-        fx.mutations_disabled ||
-        mutations.forEach(mutation => {
-            mutation.type === 'childList' && mutation.addedNodes.forEach(domNodeInserted);
-            mutation.type === 'childList' && mutation.removedNodes.forEach(domNodeRemoved);
-        });
+        runDomHandlers(fx.domNodeRemovedHandlers, node);
+    const flushMutationQueue = queue => {
+        for (let i = 0; i < queue.added.length; i++) {
+            domNodeInserted(queue.added[i]);
+        }
+        for (let i = 0; i < queue.removed.length; i++) {
+            domNodeRemoved(queue.removed[i]);
+        }
+        queue.added.length = 0;
+        queue.removed.length = 0;
+        queue.seen = new WeakSet();
+        queue.scheduled = false;
+    };
+    const queueMutationNode = (queue, list, node) => {
+        if (!queue.seen.has(node)) {
+            queue.seen.add(node);
+            list.push(node);
+        }
+    };
+    const mutationQueue = { added: [], removed: [], seen: new WeakSet(), scheduled: false };
+    const _observer = mutations => {
+        if (fx.mutations_disabled) {
+            return;
+        }
+        for (let i = 0; i < mutations.length; i++) {
+            const mutation = mutations[i];
+            if (mutation.type !== 'childList') {
+                continue;
+            }
+            for (let j = 0; j < mutation.addedNodes.length; j++) {
+                queueMutationNode(mutationQueue, mutationQueue.added, mutation.addedNodes[j]);
+            }
+            for (let j = 0; j < mutation.removedNodes.length; j++) {
+                queueMutationNode(mutationQueue, mutationQueue.removed, mutation.removedNodes[j]);
+            }
+        }
+        if (!mutationQueue.scheduled && (mutationQueue.added.length || mutationQueue.removed.length)) {
+            mutationQueue.scheduled = true;
+            (window.requestIdleCallback || window.requestAnimationFrame || (callback => setTimeout(callback, 0)))(
+                () => flushMutationQueue(mutationQueue)
+            );
+        }
+    };
     X(() => new MutationObserver(_observer).observe(document.body, { childList: true, subtree: true }));
 
     // Return the API
@@ -4366,7 +4414,7 @@ var FX = (function() {
 })();
 
 const SFX = {
-    version: '31.1.0',
+    version: '31.1.1',
     buildtype: 'userscript',
     releasetype: '',
     userscript_agent: undefined,
