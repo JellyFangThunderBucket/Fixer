@@ -1,6 +1,7 @@
 // ==UserScript==
 // @name           Social Fixer for Facebook
 // @namespace      http://userscripts.org/users/864169999
+// @description Enhances Facebook with advanced filtering, customization, and feed management features.
 // @include        /^https:\/\/facebook\.com\//
 // @include        /^https:\/\/[^\/]*\.facebook\.com\//
 // @include        /^https:\/\/[^\/]*\.messenger\.com\//
